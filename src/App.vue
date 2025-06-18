@@ -10,6 +10,40 @@ const rows = ref(16);
 const grid = reactive<boolean[][]>([]);
 const canvas = ref({} as HTMLCanvasElement);
 
+// テキストエリア用のref
+const gridText = ref("");
+
+// grid -> テキスト変換
+const gridToText = () =>
+  grid.map(row => row.map(cell => (cell ? "1" : "0")).join("")).join("\n");
+// テキスト -> grid変換
+const textToGrid = (text: string) => {
+  const lines = text.split("\n");
+  for (let y = 0; y < rows.value; y++) {
+    const line = lines[y] || "";
+    for (let x = 0; x < cols.value; x++) {
+      grid[y][x] = line[x] === "1";
+    }
+  }
+  scheduleRender();
+};
+
+// gridの変更をテキストに反映
+watch(
+  () => grid.map(row => row.join("")),
+  () => {
+    gridText.value = gridToText();
+  },
+  { deep: true, immediate: true }
+);
+// テキストエリアの変更をgridに反映
+watch(
+  gridText,
+  (val) => {
+    textToGrid(val);
+  }
+);
+
 // ---- ユーティリティ ----
 const ensureGridSize = () => {
   // 行調整
@@ -82,7 +116,7 @@ const scheduleRender = () => {
 };
 
 // ---- 座標→セル ----
-const cellFromEvent = e => {
+const cellFromEvent = (e: PointerEvent) => {
   const rect = canvas.value.getBoundingClientRect();
   const s = skip();
   const x = Math.floor((e.clientX - rect.left) / s);
@@ -95,7 +129,7 @@ const cellFromEvent = e => {
 let drawing = false;
 let drawState = false;
 
-const pointerDown = e => {
+const pointerDown = (e: PointerEvent) => {
   e.preventDefault();
   const cell = cellFromEvent(e);
   if (!cell) return;
@@ -104,7 +138,7 @@ const pointerDown = e => {
   drawing = true;
   scheduleRender();
 };
-const pointerMove = e => {
+const pointerMove = (e: PointerEvent) => {
   if (!drawing) return;
   const cell = cellFromEvent(e);
   if (!cell) return;
@@ -137,25 +171,40 @@ watch([rows, cols], () => { ensureGridSize(); scheduleRender(); });
 </script>
 
 <template>
+  <div class="container">
+    <div class="row">
+      <div class="col">
+        <h1>
+          単色LED方向幕っぽいジェネレータ
+        </h1>
 
-    <h1 class="text-xl font-bold">電車行き先LED表示シミュレーター</h1>
-
-    <div class="controls">
-      <label>ドット直径
-        <input type="number" v-model.number="dotSize" min="2" max="20" />
-      </label>
-      <label>ドット間隔
-        <input type="number" v-model.number="gap" min="2" max="20" />
-      </label>
-      <label>列数
-        <input type="number" v-model.number="cols" min="8" max="128" />
-      </label>
-      <label>行数
-        <input type="number" v-model.number="rows" min="4" max="64" />
-      </label>
-      <button @click="clear">クリア</button>
+        <div class="d-flex flex-wrap align-items-end mb-3 gap-3">
+          <label>ドット直径
+            <input type="number" v-model.number="dotSize" min="2" max="20" class="form-control" />
+          </label>
+          <label>ドット間隔
+            <input type="number" v-model.number="gap" min="2" max="20" class="form-control">
+          </label>
+          <label>列数
+            <input type="number" v-model.number="cols" min="8" max="128" class="form-control"/>
+          </label>
+          <label>行数
+            <input type="number" v-model.number="rows" min="4" max="64" class="form-control"/>
+          </label>
+          <button @click="clear" class="btn btn-secondary">クリア</button>
+        </div>
+        <canvas ref="canvas"></canvas>
+        <div class="mt-3">
+          <label>共有用LEDマトリックスデータ（0,1）</label>
+          <textarea
+            v-model="gridText"
+            rows="10"
+            class="form-control font-monospace"
+          ></textarea>
+        </div>
+      </div>
     </div>
-    <canvas ref="canvas"></canvas>
+  </div>
 </template>
 
 <style scoped>
