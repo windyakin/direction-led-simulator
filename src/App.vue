@@ -2,13 +2,13 @@
 import { onMounted, watch, ref, reactive } from "vue";
 
 const dotSize = ref(8);
-const gap = 2;
+const gap = ref(2);
 const cols = ref(64);
 const rows = ref(16);
 
 // 2 次元配列（反応性）
-const grid = reactive([]);
-const canvas = ref(null);
+const grid = reactive<boolean[][]>([]);
+const canvas = ref({} as HTMLCanvasElement);
 
 // ---- ユーティリティ ----
 const ensureGridSize = () => {
@@ -27,13 +27,14 @@ const ensureGridSize = () => {
 ensureGridSize();
 
 // ---- ドット画像のプリレンダ ----
-let imgOn, imgOff;
-const makeDotImg = lit => {
+let imgOn: HTMLCanvasElement, imgOff: HTMLCanvasElement;
+const makeDotImg = (lit: boolean) => {
   const r = dotSize.value / 2;
   const s = dotSize.value;
   const off = document.createElement('canvas');
   off.width = off.height = s;
   const ctx = off.getContext('2d');
+  if (!ctx) throw new Error('Canvas context not available');
   const g = ctx.createRadialGradient(r, r, 0, r, r, r);
   if (lit) {
     g.addColorStop(0, '#ffb030');
@@ -56,13 +57,14 @@ const updateDotImgs = () => { imgOff = makeDotImg(false); imgOn = makeDotImg(tru
 
 // ---- 描画 ----
 const ctx = () => canvas.value.getContext('2d');
-const skip = () => dotSize.value + gap;
+const skip = () => dotSize.value + gap.value;
 let renderQueued = false;
 const render = () => {
   const c = ctx();
   const s = skip();
   canvas.value.width = cols.value * s;
   canvas.value.height = rows.value * s;
+  if (!c) return;
   c.clearRect(0, 0, canvas.value.width, canvas.value.height);
   for (let y = 0; y < rows.value; y++) {
     for (let x = 0; x < cols.value; x++) {
@@ -141,6 +143,9 @@ watch([rows, cols], () => { ensureGridSize(); scheduleRender(); });
     <div class="controls">
       <label>ドット直径
         <input type="number" v-model.number="dotSize" min="2" max="20" />
+      </label>
+      <label>ドット間隔
+        <input type="number" v-model.number="gap" min="2" max="20" />
       </label>
       <label>列数
         <input type="number" v-model.number="cols" min="8" max="128" />
