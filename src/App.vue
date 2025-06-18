@@ -5,6 +5,7 @@ const dotSize = ref(8);
 const gap = ref(2);
 const cols = ref(96);
 const rows = ref(16);
+const shadowSize = ref(1.1); // シャドウサイズ倍率
 
 // 2 次元配列（反応性）
 const grid = reactive<boolean[][]>([]);
@@ -63,7 +64,7 @@ ensureGridSize();
 // ---- ドット画像のプリレンダ ----
 let imgOn: HTMLCanvasElement, imgOff: HTMLCanvasElement;
 const makeDotImg = (lit: boolean) => {
-  const s = skip(); // 1セルのサイズ（ドット＋gap）
+  const s = skip();
   const r = dotSize.value / 2;
   const off = document.createElement('canvas');
   off.width = off.height = s;
@@ -71,22 +72,25 @@ const makeDotImg = (lit: boolean) => {
   if (!ctx) throw new Error('Canvas context not available');
   const cx = s / 2;
   const cy = s / 2;
-  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
   if (lit) {
+    // グラデーションのみ（シャドウなし）
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
     g.addColorStop(0, '#ffb030');
     g.addColorStop(0.7, '#d37e00');
-    g.addColorStop(1, '#332100');
+    g.addColorStop(1, 'rgba(51,33,0,0.3)');
     ctx.fillStyle = g;
-    ctx.shadowColor = '#ff8c00';
-    ctx.shadowBlur = r * 1.3;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
   } else {
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
     g.addColorStop(0, '#333');
     g.addColorStop(1, '#000');
     ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
   }
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.fill();
   return off;
 };
 
@@ -97,19 +101,52 @@ const ctx = () => canvas.value.getContext('2d');
 const skip = () => dotSize.value + gap.value;
 let renderQueued = false;
 const render = () => {
+  const CANVAS_PADDING = dotSize.value;
   const c = ctx();
   const s = skip();
-  canvas.value.width = cols.value * s;
-  canvas.value.height = rows.value * s;
+  canvas.value.width = cols.value * s + CANVAS_PADDING * 2;
+  canvas.value.height = rows.value * s + CANVAS_PADDING * 2;
   if (!c) return;
   c.clearRect(0, 0, canvas.value.width, canvas.value.height);
   c.fillStyle = "#000";
   c.fillRect(0, 0, canvas.value.width, canvas.value.height);
+  // まず全ての消灯LEDを描画
   for (let y = 0; y < rows.value; y++) {
     for (let x = 0; x < cols.value; x++) {
-      c.drawImage(grid[y][x] ? imgOn : imgOff, x * s, y * s);
+      c.drawImage(imgOff, x * s + CANVAS_PADDING, y * s + CANVAS_PADDING);
     }
   }
+  // 点灯LEDをグラデーション合成で重ねる
+  for (let y = 0; y < rows.value; y++) {
+    for (let x = 0; x < cols.value; x++) {
+      if (grid[y][x]) {
+        c.drawImage(imgOn, x * s + CANVAS_PADDING, y * s + CANVAS_PADDING);
+      }
+    }
+  }
+  c.globalCompositeOperation = "hard-light";
+  // さらに点灯LEDのシャドウを直接描画
+  for (let y = 0; y < rows.value; y++) {
+    for (let x = 0; x < cols.value; x++) {
+      if (grid[y][x]) {
+        const cx = x * s + s / 2 + CANVAS_PADDING;
+        const cy = y * s + s / 2 + CANVAS_PADDING;
+        const r = dotSize.value * shadowSize.value;
+        const grad = c.createRadialGradient(cx, cy, 0, cx, cy, r);
+        grad.addColorStop(0, 'rgba(255, 176, 48, 0.5)');
+        grad.addColorStop(0.7, 'rgba(255, 176, 48, 0.2)');
+        grad.addColorStop(1, 'rgba(255, 176, 48, 0)');
+        c.save();
+        c.globalAlpha = 1.0;
+        c.beginPath();
+        c.arc(cx, cy, r, 0, Math.PI * 2);
+        c.fillStyle = grad;
+        c.fill();
+        c.restore();
+      }
+    }
+  }
+  c.globalCompositeOperation = "source-over";
 };
 const scheduleRender = () => {
   if (renderQueued) return;
@@ -124,8 +161,8 @@ const scheduleRender = () => {
 const cellFromEvent = (e: PointerEvent) => {
   const rect = canvas.value.getBoundingClientRect();
   const s = skip();
-  const x = Math.floor((e.clientX - rect.left) / s);
-  const y = Math.floor((e.clientY - rect.top) / s);
+  const x = Math.floor((e.clientX - rect.left - dotSize.value) / s);
+  const y = Math.floor((e.clientY - rect.top - dotSize.value) / s);
   if (x >= 0 && x < cols.value && y >= 0 && y < rows.value) return { x, y };
   return null;
 };
@@ -180,7 +217,7 @@ onMounted(() => {
 });
 
 // ---- ウォッチャ ----
-watch([dotSize, gap], () => { updateDotImgs(); scheduleRender(); });
+watch([dotSize, gap, shadowSize], () => { updateDotImgs(); scheduleRender(); });
 watch([rows, cols], () => { ensureGridSize(); scheduleRender(); });
 
 </script>
@@ -192,21 +229,44 @@ watch([rows, cols], () => { ensureGridSize(); scheduleRender(); });
         <h1 class="fw-bold mb-3">
           単色LED方向幕っぽいジェネレータ
         </h1>
-        <div class="d-flex flex-wrap align-items-end mb-3 gap-3">
-          <label>ドット直径
-            <input type="number" v-model.number="dotSize" min="2" max="20" class="form-control" />
-          </label>
-          <label>ドット間隔
-            <input type="number" v-model.number="gap" min="0" max="20" class="form-control">
-          </label>
-          <label>列数
-            <input type="number" v-model.number="cols" min="8" max="128" class="form-control"/>
-          </label>
-          <label>行数
-            <input type="number" v-model.number="rows" min="4" max="64" class="form-control"/>
-          </label>
-          <button @click="clear" class="btn btn-secondary">クリア</button>
-          <button @click="downloadImage" class="btn btn-primary">画像を保存</button>
+        <div class="row row-cols-lg-auto g-3 align-items-center">
+          <div class="col-12">
+            <div class="input-group">
+              <div class="input-group-text">ドット直径</div>
+              <input type="number" v-model.number="dotSize" min="2" max="20" class="form-control" />
+            </div>
+          </div>
+          <div class="col-12">
+            <div class="input-group">
+              <div class="input-group-text">ドット間隔</div>
+              <input type="number" v-model.number="gap" min="0" max="20" class="form-control">
+            </div>
+          </div>
+          <div class="col-12">
+            <div class="input-group">
+              <div class="input-group-text">列数</div>
+              <input type="number" v-model.number="cols" min="8" max="128" class="form-control"/>
+            </div>
+          </div>
+          <div class="col-12">
+            <div clasS="input-group">
+              <div class="input-group-text">行数</div>
+              <input type="number" v-model.number="rows" min="4" max="64" class="form-control"/>
+            </div>
+          </div>
+          <div class="col-12">
+            <div class="input-group">
+              <div class="input-group-text">発光</div>
+              <input type="range" v-model.number="shadowSize" min="0.5" max="2.0" step="0.01" class="form-control" />
+              <div class="input-group-text">{{ shadowSize.toFixed(2) }}</div>
+            </div>
+          </div>
+          <div class="col-12">
+            <button @click="clear" class="btn btn-secondary">クリア</button>
+          </div>
+          <div class="col-12">
+            <button @click="downloadImage" class="btn btn-primary">画像を保存</button>
+          </div>
         </div>
         <canvas ref="canvas"></canvas>
         <div class="mt-3">
