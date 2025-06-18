@@ -275,6 +275,14 @@ function updateShareUrl() {
   url.searchParams.set('cols', String(cols.value));
   url.searchParams.set('rows', String(rows.value));
   shareUrl.value = url.toString();
+  navigator.clipboard.writeText(shareUrl.value)
+    .then(() => {
+      alert('共有用URLをクリップボードにコピーしました');
+    })
+    .catch(err => {
+      console.error('Failed to copy URL: ', err);
+      alert('URLのコピーに失敗しました。コンソールを確認してください。');
+    });
 }
 function loadFromQuery() {
   const params = new URLSearchParams(window.location.search);
@@ -361,10 +369,7 @@ watch([rows, cols], () => { ensureGridSize(); scheduleRender(); });
             <button @click="downloadImage" class="btn btn-primary">画像を保存</button>
           </div>
           <div class="col-12">
-            <button @click="updateShareUrl" class="btn btn-success">共有用URL生成</button>
-          </div>
-          <div class="col-12">
-            <input type="text" class="form-control font-monospace" v-model="shareUrl" readonly @focus="(e) => e.target.select()" />
+            <button @click="updateShareUrl" class="btn btn-success">共有用URLをコピー</button>
           </div>
         </div>
         <canvas ref="canvas"></canvas>
