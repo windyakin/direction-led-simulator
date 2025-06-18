@@ -6,6 +6,7 @@ const gap = ref(2);
 const cols = ref(96);
 const rows = ref(16);
 const shadowSize = ref(1.1); // シャドウサイズ倍率
+const isCircleLED = ref(false); // 縦横比を固定するかどうか
 
 // 2 次元配列（反応性）
 const grid = reactive<boolean[][]>([]);
@@ -63,6 +64,19 @@ ensureGridSize();
 
 // ---- ドット画像のプリレンダ ----
 let imgOn: HTMLCanvasElement, imgOff: HTMLCanvasElement;
+function roundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
 const makeDotImg = (lit: boolean) => {
   const s = skip();
   const r = dotSize.value / 2;
@@ -72,23 +86,39 @@ const makeDotImg = (lit: boolean) => {
   if (!ctx) throw new Error('Canvas context not available');
   const cx = s / 2;
   const cy = s / 2;
+  const size = dotSize.value;
+  const corner = dotSize.value * 0.2; // 角丸半径
   if (lit) {
     // グラデーションのみ（シャドウなし）
-    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-    g.addColorStop(0, '#ffb030');
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r * 1.5);
+    g.addColorStop(0, '#ff9830');
     g.addColorStop(0.7, '#d37e00');
-    g.addColorStop(1, 'rgba(51,33,0,0.3)');
+    g.addColorStop(1, 'rgba(51,33,0,0.8)');
     ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    if (isCircleLED.value) {
+      // 円形LED
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      // 四角形LED
+      roundedRect(ctx, cx - size/2, cy - size/2, size, size, corner);
+    }
     ctx.fill();
   } else {
-    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-    g.addColorStop(0, '#333');
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r * 1.5);
+    g.addColorStop(0, '#222');
     g.addColorStop(1, '#000');
     ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    if (isCircleLED.value) {
+      // 円形LED
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      // 四角形LED
+      roundedRect(ctx, cx - size/2, cy - size/2, size, size, corner);
+    }
     ctx.fill();
   }
   return off;
@@ -217,7 +247,7 @@ onMounted(() => {
 });
 
 // ---- ウォッチャ ----
-watch([dotSize, gap, shadowSize], () => { updateDotImgs(); scheduleRender(); });
+watch([dotSize, gap, shadowSize, isCircleLED], () => { updateDotImgs(); scheduleRender(); });
 watch([rows, cols], () => { ensureGridSize(); scheduleRender(); });
 
 </script>
@@ -259,6 +289,17 @@ watch([rows, cols], () => { ensureGridSize(); scheduleRender(); });
               <div class="input-group-text">発光</div>
               <input type="range" v-model.number="shadowSize" min="0.5" max="2.0" step="0.01" class="form-control" />
               <div class="input-group-text">{{ shadowSize.toFixed(2) }}</div>
+            </div>
+          </div>
+          <div class="col-12">
+            <div class="form-check">
+              <input
+                type="checkbox"
+                v-model="isCircleLED"
+                class="form-check-input"
+                id="circleLED"
+              />
+              <label class="form-check-label" for="circleLED">円形LED</label>
             </div>
           </div>
           <div class="col-12">
