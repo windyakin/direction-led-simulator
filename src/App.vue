@@ -3,7 +3,7 @@ import { onMounted, watch, ref, reactive } from "vue";
 
 const dotSize = ref(8);
 const gap = ref(2);
-const cols = ref(64);
+const cols = ref(96);
 const rows = ref(16);
 
 // 2 次元配列（反応性）
@@ -63,13 +63,15 @@ ensureGridSize();
 // ---- ドット画像のプリレンダ ----
 let imgOn: HTMLCanvasElement, imgOff: HTMLCanvasElement;
 const makeDotImg = (lit: boolean) => {
+  const s = skip(); // 1セルのサイズ（ドット＋gap）
   const r = dotSize.value / 2;
-  const s = dotSize.value;
   const off = document.createElement('canvas');
   off.width = off.height = s;
   const ctx = off.getContext('2d');
   if (!ctx) throw new Error('Canvas context not available');
-  const g = ctx.createRadialGradient(r, r, 0, r, r, r);
+  const cx = s / 2;
+  const cy = s / 2;
+  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
   if (lit) {
     g.addColorStop(0, '#ffb030');
     g.addColorStop(0.7, '#d37e00');
@@ -83,10 +85,11 @@ const makeDotImg = (lit: boolean) => {
     ctx.fillStyle = g;
   }
   ctx.beginPath();
-  ctx.arc(r, r, r, 0, Math.PI * 2);
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
   ctx.fill();
   return off;
 };
+
 const updateDotImgs = () => { imgOff = makeDotImg(false); imgOn = makeDotImg(true); };
 
 // ---- 描画 ----
@@ -100,6 +103,8 @@ const render = () => {
   canvas.value.height = rows.value * s;
   if (!c) return;
   c.clearRect(0, 0, canvas.value.width, canvas.value.height);
+  c.fillStyle = "#000";
+  c.fillRect(0, 0, canvas.value.width, canvas.value.height);
   for (let y = 0; y < rows.value; y++) {
     for (let x = 0; x < cols.value; x++) {
       c.drawImage(grid[y][x] ? imgOn : imgOff, x * s, y * s);
@@ -155,6 +160,16 @@ const clear = () => {
   scheduleRender();
 };
 
+// ---- 画像保存 ----
+const downloadImage = () => {
+  const el = canvas.value;
+  const url = el.toDataURL("image/png");
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "led-matrix.png";
+  a.click();
+};
+
 // ---- ライフサイクル ----
 onMounted(() => {
   updateDotImgs();
@@ -165,7 +180,7 @@ onMounted(() => {
 });
 
 // ---- ウォッチャ ----
-watch(dotSize, () => { updateDotImgs(); scheduleRender(); });
+watch([dotSize, gap], () => { updateDotImgs(); scheduleRender(); });
 watch([rows, cols], () => { ensureGridSize(); scheduleRender(); });
 
 </script>
@@ -173,17 +188,16 @@ watch([rows, cols], () => { ensureGridSize(); scheduleRender(); });
 <template>
   <div class="container">
     <div class="row">
-      <div class="col">
-        <h1>
+      <div class="col my-4">
+        <h1 class="fw-bold mb-3">
           単色LED方向幕っぽいジェネレータ
         </h1>
-
         <div class="d-flex flex-wrap align-items-end mb-3 gap-3">
           <label>ドット直径
             <input type="number" v-model.number="dotSize" min="2" max="20" class="form-control" />
           </label>
           <label>ドット間隔
-            <input type="number" v-model.number="gap" min="2" max="20" class="form-control">
+            <input type="number" v-model.number="gap" min="0" max="20" class="form-control">
           </label>
           <label>列数
             <input type="number" v-model.number="cols" min="8" max="128" class="form-control"/>
@@ -192,6 +206,7 @@ watch([rows, cols], () => { ensureGridSize(); scheduleRender(); });
             <input type="number" v-model.number="rows" min="4" max="64" class="form-control"/>
           </label>
           <button @click="clear" class="btn btn-secondary">クリア</button>
+          <button @click="downloadImage" class="btn btn-primary">画像を保存</button>
         </div>
         <canvas ref="canvas"></canvas>
         <div class="mt-3">
