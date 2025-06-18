@@ -22,7 +22,7 @@ jobs:
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: ${{ github.workspace }}/docs
+          path: ${{ github.workspace }}/dist
 
   deploy:
     needs: build
