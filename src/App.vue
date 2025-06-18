@@ -237,8 +237,60 @@ const downloadImage = () => {
   a.click();
 };
 
-// ---- ライフサイクル ----
+// --- 16進数圧縮・展開 ---
+function gridToHex(): string {
+  let bits = '';
+  for (let y = 0; y < rows.value; y++) {
+    for (let x = 0; x < cols.value; x++) {
+      bits += grid[y][x] ? '1' : '0';
+    }
+  }
+  // 4bitごとに分割して16進数化
+  let hex = '';
+  for (let i = 0; i < bits.length; i += 4) {
+    const chunk = bits.slice(i, i + 4).padEnd(4, '0');
+    hex += parseInt(chunk, 2).toString(16);
+  }
+  return hex;
+}
+function hexToGrid(hex: string) {
+  let bits = '';
+  for (let i = 0; i < hex.length; i++) {
+    bits += parseInt(hex[i], 16).toString(2).padStart(4, '0');
+  }
+  let idx = 0;
+  for (let y = 0; y < rows.value; y++) {
+    for (let x = 0; x < cols.value; x++) {
+      grid[y][x] = bits[idx++] === '1';
+    }
+  }
+}
+
+// --- URLクエリ共有 ---
+const shareUrl = ref('');
+function updateShareUrl() {
+  const hex = gridToHex();
+  const url = new URL(window.location.href);
+  url.searchParams.set('data', hex);
+  url.searchParams.set('cols', String(cols.value));
+  url.searchParams.set('rows', String(rows.value));
+  shareUrl.value = url.toString();
+}
+function loadFromQuery() {
+  const params = new URLSearchParams(window.location.search);
+  const hex = params.get('data');
+  const qCols = params.get('cols');
+  const qRows = params.get('rows');
+  if (hex && qCols && qRows) {
+    cols.value = parseInt(qCols);
+    rows.value = parseInt(qRows);
+    ensureGridSize();
+    hexToGrid(hex);
+    scheduleRender();
+  }
+}
 onMounted(() => {
+  loadFromQuery();
   updateDotImgs();
   render();
   canvas.value.addEventListener('pointerdown', pointerDown);
@@ -308,6 +360,12 @@ watch([rows, cols], () => { ensureGridSize(); scheduleRender(); });
           <div class="col-12">
             <button @click="downloadImage" class="btn btn-primary">画像を保存</button>
           </div>
+          <div class="col-12">
+            <button @click="updateShareUrl" class="btn btn-success">共有用URL生成</button>
+          </div>
+          <div class="col-12">
+            <input type="text" class="form-control font-monospace" v-model="shareUrl" readonly @focus="(e) => e.target.select()" />
+          </div>
         </div>
         <canvas ref="canvas"></canvas>
         <div class="mt-3">
@@ -322,18 +380,3 @@ watch([rows, cols], () => { ensureGridSize(); scheduleRender(); });
     </div>
   </div>
 </template>
-
-<style scoped>
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.vue:hover {
-  filter: drop-shadow(0 0 2em #42b883aa);
-}
-</style>
